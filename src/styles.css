@@ -121,7 +121,8 @@ img.all-dim,img.all-on,img.green-lit,img.red-lit, img.yellow-lit,img.blue-lit,im
 }
 
 .score-div p{
-    margin: 5% 0;
+    margin-top:20%;
+    font-size: var(--fs-h2);
 }
 
 

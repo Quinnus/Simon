@@ -25,6 +25,7 @@ export default function App() {
         const newPowerOn = !powerOn;
         setPowerOn(newPowerOn);
         if (newPowerOn) {
+            setStreak(0);
             const newSequence = [BUTTONS[generateNextColor()]];
             setSimonSequence(newSequence);
             startRound(newSequence);
@@ -33,16 +34,16 @@ export default function App() {
         }
     }
 
-    function startRound() {
-        for (let n = 0; n < simonSequence.length; n++) {
+    function startRound(newSequence) {
+        for (let n = 0; n < newSequence.length; n++) {
             setTimeout(
                 () => {
-                    showSequence(simonSequence[n]);
+                    showSequence(newSequence[n]);
                 },
                 (n + 1) * 800,
             );
         }
-        for (let m = 0; m < simonSequence.length; m++) {}
+        for (let m = 0; m < newSequence.length; m++) {}
     }
 
     const showSequence = (lightUp) => {
@@ -162,12 +163,11 @@ export default function App() {
                         <div className="btn-yellow" onClick={() => handleClick('yellow')} />
                     </div>
                     <div id="power-grid">
-                        <div className="score-div">
-                            <p>Streak</p>
-                            <p>{streak}</p>
-                        </div>
                         <div id="power-button" onClick={handlePowerClick}></div>
                     </div>
+                </div>
+                <div className="score-div">
+                    <p>Streak: {streak}</p>
                 </div>
                 {quitModalVisible && (
                     <ConfirmQuitModal
