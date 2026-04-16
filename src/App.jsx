@@ -1,6 +1,5 @@
 import './styles.css';
 import { useRef, useState } from 'react';
-import ConfirmQuitModal from './components/ConfirmQuitModal.jsx';
 import GameSummaryModal from './components/GameSummaryModal.jsx';
 import useGameSounds from './hooks/useGameSounds.js';
 
@@ -10,11 +9,14 @@ export default function App() {
     const gameRound = useRef(0);
 
     if (gameRound.current <= 4) {
-        showLit = 600;
-        buttonPause = 500;
+        showLit = 800;
+        buttonPause = 600;
+    } else if (gameRound.current > 13) {
+        showLit = 100;
+        buttonPause = 100;
     } else if (gameRound.current > 8) {
         showLit = 200;
-        buttonPause = 100;
+        buttonPause = 150;
     } else if (gameRound.current > 4) {
         showLit = 400;
         buttonPause = 300;
@@ -23,68 +25,113 @@ export default function App() {
     const BUTTONS = ['green', 'red', 'yellow', 'blue'];
     const [gameScreen, setGameScreen] = useState('idle');
     const [powerOn, setPowerOn] = useState(false);
-    const [quitModalVisible, setQuitModalVisible] = useState(false);
     const [gameSummaryVisible, setGameSummaryVisible] = useState(false);
     const [streak, setStreak] = useState(0);
-    const tempScreenRegister = useRef(null);
-    const { playTone } = useGameSounds(showLit);
+    const { playTone, playWrongTone } = useGameSounds();
     const [simonSequence, setSimonSequence] = useState([]);
     const playerCount = useRef(0);
+    const [currentPlayer, setCurrentPlayer] = useState('simon');
+    const sequenceTimeArray = useRef([]);
+    const previousTimeOut = useRef(null);
+    const [countdownValue, setCountdownValue] = useState(3);
+    const countdownInterval = useRef(null);
+    const [countdownVisible, setCountdownVisible] = useState(false);
 
     function handlePowerClick() {
         if (powerOn) {
-            setQuitModalVisible(true);
-        } else setQuitModalVisible(false);
+            exitToSummary();
+            return;
+        }
         const newPowerOn = !powerOn;
         setPowerOn(newPowerOn);
         if (newPowerOn) {
+            setCountdownValue(3);
+            runStartupCycle();
             setStreak(0);
             playerCount.current = 0;
             const newSequence = [BUTTONS[generateNextColor()]];
             setSimonSequence(newSequence);
             setTimeout(() => {
                 startRound(newSequence);
-            }, 5000);
-
+            }, 6000);
             setGameScreen('awake');
-        } else {
-            setGameScreen('idle');
         }
+    }
+
+    function runStartupCycle() {
+        for (let r = 0; r < 4; r++) {
+            setTimeout(
+                () => {
+                    playTone(`${BUTTONS[r]}`, 600);
+                    setGameScreen(`${BUTTONS[r]}-lit`);
+                },
+                (r + 1) * 600,
+            );
+        }
+        setTimeout(() => {
+            playTone(`green`, 600);
+            setGameScreen(`all-lit`);
+        }, 3000);
+        setTimeout(() => {
+            setGameScreen(`all-on`);
+        }, 3600);
+        setTimeout(() => {
+            setCountdownVisible(true);
+            playTone(`green`, 600);
+            countdownInterval.current = setInterval(() => {
+                setCountdownValue((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(countdownInterval.current);
+                        return 0;
+                    }
+                    playTone(`green`, 600);
+                    return prev - 1;
+                });
+            }, 1000);
+        }, 4000);
+
+        setTimeout(() => {
+            setCountdownVisible(false);
+        }, 8000);
     }
 
     function startRound(newSequence) {
         gameRound.current = gameRound.current + 1;
-        console.log('Round' + gameRound.current);
-        console.log(showLit);
-        console.log(buttonPause);
-
         for (let n = 0; n < newSequence.length; n++) {
-            setTimeout(
-                () => {
-                    showSequence(newSequence[n]);
-                },
-                (n + 1) * (showLit + buttonPause), // to allow for additional buttons to be displayed, and as n starts at 0, each button gets 800ms to display before moving onto the next color
+            sequenceTimeArray.current.push(
+                setTimeout(
+                    () => {
+                        showSequence(newSequence[n]);
+                    },
+                    (n + 1) * (showLit + buttonPause),
+                ),
             );
         }
-    } // simonsequence fully shown, now await player input
+        sequenceTimeArray.current.push(
+            setTimeout(
+                () => setCurrentPlayer('player'),
+                newSequence.length * (showLit + buttonPause) + showLit,
+            ),
+        );
+    }
 
     const showSequence = (lightUp) => {
-        console.log('lightUp:', lightUp);
         setGameScreen(`${lightUp}-lit`);
-        playTone(`${lightUp}`);
+        playTone(`${lightUp}`, showLit);
         setTimeout(() => {
             setGameScreen('awake');
         }, showLit);
     };
 
     const handleClick = (pressed) => {
-        if (powerOn) {
+        if (powerOn && currentPlayer !== 'simon') {
+            clearTimeout(previousTimeOut.current);
             let tempCount = playerCount.current;
             setGameScreen(`${pressed}-lit`);
             if (pressed === simonSequence[tempCount]) {
                 playerCount.current = playerCount.current + 1;
-                playTone(`${pressed}`);
-                setTimeout(() => {
+                playTone(`${pressed}`, 800);
+                previousTimeOut.current = setTimeout(() => {
                     setGameScreen('awake');
                 }, 800);
                 if (playerCount.current === simonSequence.length) {
@@ -94,9 +141,11 @@ export default function App() {
                     let newSimonSequence = [...simonSequence, simonNext];
                     setSimonSequence(newSimonSequence);
                     playerCount.current = 0;
+                    setCurrentPlayer('simon');
                     startRound(newSimonSequence);
                 }
             } else {
+                playWrongTone();
                 setTimeout(() => {
                     setGameScreen('awake');
                 }, 800);
@@ -106,28 +155,27 @@ export default function App() {
     };
 
     function generateNextColor() {
-        const randomNum = Math.floor(Math.random() * 4);
-        console.log(randomNum); //for testing only
-        return randomNum;
-    }
-
-    function handleResumeGame() {
-        setQuitModalVisible(false);
-        setGameScreen(tempScreenRegister.current);
+        return Math.floor(Math.random() * 4);
     }
 
     function exitAndShutDown() {
-        setQuitModalVisible(false);
         setGameSummaryVisible(false);
         setGameScreen('idle');
         setPowerOn(false);
+        gameRound.current = 0;
+        for (let t = 0; t < sequenceTimeArray.current.length; t++) {
+            clearTimeout(sequenceTimeArray.current[t]);
+        }
+        sequenceTimeArray.current = [];
     }
 
     function exitToSummary() {
-        console.log(simonSequence);
-        console.log(playerCount.current);
-        setQuitModalVisible(false);
+        for (let t = 0; t < sequenceTimeArray.current.length; t++) {
+            clearTimeout(sequenceTimeArray.current[t]);
+        }
         setGameSummaryVisible(true);
+        gameRound.current = 0;
+        sequenceTimeArray.current = [];
     }
 
     return (
@@ -185,20 +233,19 @@ export default function App() {
                     <div id="power-grid">
                         <div id="power-button" onClick={handlePowerClick}></div>
                     </div>
+                    <div className="score-div">
+                        <p>Streak: {streak}</p>
+                    </div>
+                    {countdownValue > 0 && countdownVisible && powerOn && (
+                        <div id="countdown-overlay-grid">
+                            <p id="countdown-number">{countdownValue}</p>
+                        </div>
+                    )}
                 </div>
-                {/*<div className="score-div">*/}
-                {/*    <p>Streak: {streak}</p>*/}
-                {/*</div>*/}
-                {quitModalVisible && (
-                    <ConfirmQuitModal
-                        handleResumeGame={handleResumeGame}
-                        exitToSummary={exitToSummary}
-                    />
-                )}
+
                 {gameSummaryVisible && (
                     <GameSummaryModal exitAndShutDown={exitAndShutDown} streak={streak} />
                 )}
-                {/*{gameoverModalVisible && <GameOverModal handleGameOver={handleGameOver} />}*/}
             </div>
         </>
     );

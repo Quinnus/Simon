@@ -22,7 +22,7 @@ html, body, #root {
 
     --fs-sm: clamp(1.2rem, 2vw, 1.4rem);
     --fs-body: clamp(1.4rem, 3vw, 1.6rem);
-    --fs-h3: clamp(1.8rem, 3.5vw, 2.2rem);
+    --fs-h3: clamp(1rem, 3.5vw, 2.2rem);
     --fs-h2: clamp(2.2rem, 4vw, 2.8rem);
     --fs-h1: clamp(2.8rem, 5vw, 4rem);
 }
@@ -57,7 +57,7 @@ body {
     grid-area: board;
     width: min(80vw, 80vh);
     aspect-ratio: 1;
-    /*transition: opacity 500ms;*/
+
 
 }
 
@@ -86,6 +86,19 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
 }
 
 
+
+#countdown-overlay-grid{
+    grid-area: board;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    z-index:20;
+    justify-items: center;
+    align-items: center;
+
+}
+
+
 #power-grid {
     grid-area: board;
     display: grid;
@@ -101,18 +114,14 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
     text-align: center;
 }
 
-#power-grid .score-div {
-    user-select: none;
-    cursor: pointer;
-    grid-area: 3/3/4/4;
-    z-index: 25;
-    text-align: center;
-    font-size: 3vmin;
-}
 
-.score-div p {
-    margin-top: 20%;
-    font-size: var(--fs-h2);
+
+
+.score-div {
+    margin-top:5%;
+    font-size: var(--fs-h3);
+    min-height: 20%;
+    justify-self: center;
 }
 
 
@@ -136,37 +145,6 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
     padding: 1.5rem;
     text-align: center;
 }
-
-
-/*.modal button{*/
-/*    background-color: var(--background);*/
-/*    border: 2px solid var(--text-muted);*/
-/*    font-size: var(--fs-h3);*/
-/*    width:30%;*/
-/*    margin:10%;*/
-/*    color:var(--text);*/
-/*    transition: 0.3s ease all;*/
-
-/*}*/
-
-/*.modal button:hover{*/
-/*    color:var(--accent);*/
-/*    transform:scale(110%);*/
-/*    cursor: pointer;*/
-/*    user-select: none;*/
-/*}*/
-
-/*body {*/
-/*    margin: 0;*/
-/*    min-height: 100vh;*/
-/*    display: flex;*/
-/*    align-items: center;*/
-/*    justify-content: center;*/
-/*    background: #0a0a0a;*/
-/*    font-family: "Inter", sans-serif;*/
-/*    perspective: 1000px;*/
-/*    overflow-x: hidden;*/
-/*}*/
 
 .modal button {
     position: relative;
@@ -213,4 +191,16 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
         transform: scale(1.5);
         opacity: 0;
     }
+}
+
+
+
+#countdown-number {
+    cursor: pointer;
+    font-size: 1000%;
+    font-weight: bolder;
+    color: var(--text);
+    pointer-events: none;
+    text-shadow: 8px 8px 10px black;
+
 }
