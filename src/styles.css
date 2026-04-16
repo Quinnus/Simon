@@ -1,22 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap');
 
-
-
-
-/* ─── Reset ─────────────────────────────────── */
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-/* ─── Full height ────────────────────────────── */
 html, body, #root {
     height: 100%;
 
 }
 
-/* ─── Design tokens ──────────────────────────── */
 :root {
     --background: #111111;
     --surface: #1e1e1e;
@@ -26,7 +20,6 @@ html, body, #root {
     --font-body: "Orbitron", system-ui;
     --font-heading: "Orbitron", system-ui, sans-serif;
 
-    /* fluid type scale */
     --fs-sm: clamp(1.2rem, 2vw, 1.4rem);
     --fs-body: clamp(1.4rem, 3vw, 1.6rem);
     --fs-h3: clamp(1.8rem, 3.5vw, 2.2rem);
@@ -34,7 +27,6 @@ html, body, #root {
     --fs-h1: clamp(2.8rem, 5vw, 4rem);
 }
 
-/* ─── Body defaults ──────────────────────────── */
 body {
     min-height: 100dvh;
     font-family: var(--font-body), sans-serif;
@@ -45,7 +37,7 @@ body {
 
 }
 
-/* ─── App container ──────────────────────────── */
+
 .app {
     width: 100%;
     min-height: 100dvh;
@@ -65,11 +57,9 @@ body {
     grid-area: board;
     width: min(80vw, 80vh);
     aspect-ratio: 1;
-    transition:opacity 500ms;
+    /*transition: opacity 500ms;*/
 
 }
-
-
 
 
 img {
@@ -77,70 +67,71 @@ img {
     aspect-ratio: 1;
 }
 
-img.all-dim,img.all-on,img.green-lit,img.red-lit, img.yellow-lit,img.blue-lit,img.all-lit{
+img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-lit, img.all-lit {
     opacity: 0;
 }
 
-#button-grid{
+#button-grid {
 
-    grid-area:board;
-    display:grid;
+    grid-area: board;
+    display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-        z-index: 10;
+    z-index: 10;
 
 }
 
-#button-grid:hover{
-    cursor:pointer;
+#button-grid:hover {
+    cursor: pointer;
 }
 
 
-#power-grid{
-    grid-area:board;
-    display:grid;
+#power-grid {
+    grid-area: board;
+    display: grid;
     grid-template-columns: repeat(5, 1fr);
-    grid-template-rows: repeat(5,1fr);
+    grid-template-rows: repeat(5, 1fr);
 
 }
 
-#power-grid #power-button{
+#power-grid #power-button {
     grid-area: 3/3/4/4;
-    z-index:30;
+    z-index: 30;
     cursor: pointer;
     text-align: center;
 }
 
-#power-grid .score-div{
+#power-grid .score-div {
     user-select: none;
     cursor: pointer;
-    grid-area:3/3/4/4;
+    grid-area: 3/3/4/4;
     z-index: 25;
     text-align: center;
     font-size: 3vmin;
 }
 
-.score-div p{
-    margin-top:20%;
+.score-div p {
+    margin-top: 20%;
     font-size: var(--fs-h2);
 }
 
 
 .modal-overlay {
     position: fixed;
-    inset: 0;                     /* covers full screen */
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.8);
     user-select: none;
     font-size: var(--fs-h3);
-    z-index:1000;}
+    z-index: 1000;
+}
 
 .modal {
-    width: 100%;      /* responsive width with a max */
-    max-height: 80dvh;            /* never taller than 80% of screen */
-    overflow-y: auto;             /* scroll if content is too tall */
+    width: 100%;
+    max-height: 80dvh;
+    overflow-y: auto;
     border-radius: 12px;
     padding: 1.5rem;
     text-align: center;

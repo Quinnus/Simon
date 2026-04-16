@@ -5,6 +5,21 @@ import GameSummaryModal from './components/GameSummaryModal.jsx';
 import useGameSounds from './hooks/useGameSounds.js';
 
 export default function App() {
+    let showLit;
+    let buttonPause;
+    const gameRound = useRef(0);
+
+    if (gameRound.current <= 4) {
+        showLit = 600;
+        buttonPause = 500;
+    } else if (gameRound.current > 8) {
+        showLit = 200;
+        buttonPause = 100;
+    } else if (gameRound.current > 4) {
+        showLit = 400;
+        buttonPause = 300;
+    }
+
     const BUTTONS = ['green', 'red', 'yellow', 'blue'];
     const [gameScreen, setGameScreen] = useState('idle');
     const [powerOn, setPowerOn] = useState(false);
@@ -12,39 +27,46 @@ export default function App() {
     const [gameSummaryVisible, setGameSummaryVisible] = useState(false);
     const [streak, setStreak] = useState(0);
     const tempScreenRegister = useRef(null);
-    const { playTone } = useGameSounds();
+    const { playTone } = useGameSounds(showLit);
     const [simonSequence, setSimonSequence] = useState([]);
-    const [playerSequence, setPlayerSequence] = useState([]);
-    let startingSeq;
+    const playerCount = useRef(0);
 
     function handlePowerClick() {
         if (powerOn) {
-            tempScreenRegister.current = gameScreen;
             setQuitModalVisible(true);
         } else setQuitModalVisible(false);
         const newPowerOn = !powerOn;
         setPowerOn(newPowerOn);
         if (newPowerOn) {
             setStreak(0);
+            playerCount.current = 0;
             const newSequence = [BUTTONS[generateNextColor()]];
             setSimonSequence(newSequence);
-            startRound(newSequence);
+            setTimeout(() => {
+                startRound(newSequence);
+            }, 5000);
+
+            setGameScreen('awake');
         } else {
             setGameScreen('idle');
         }
     }
 
     function startRound(newSequence) {
+        gameRound.current = gameRound.current + 1;
+        console.log('Round' + gameRound.current);
+        console.log(showLit);
+        console.log(buttonPause);
+
         for (let n = 0; n < newSequence.length; n++) {
             setTimeout(
                 () => {
                     showSequence(newSequence[n]);
                 },
-                (n + 1) * 800,
+                (n + 1) * (showLit + buttonPause), // to allow for additional buttons to be displayed, and as n starts at 0, each button gets 800ms to display before moving onto the next color
             );
         }
-        for (let m = 0; m < newSequence.length; m++) {}
-    }
+    } // simonsequence fully shown, now await player input
 
     const showSequence = (lightUp) => {
         console.log('lightUp:', lightUp);
@@ -52,37 +74,34 @@ export default function App() {
         playTone(`${lightUp}`);
         setTimeout(() => {
             setGameScreen('awake');
-        }, 800);
+        }, showLit);
     };
 
     const handleClick = (pressed) => {
         if (powerOn) {
-            let userInput = [];
-            setPlayerSequence(userInput);
+            let tempCount = playerCount.current;
             setGameScreen(`${pressed}-lit`);
-            for (let j = 0; j < playerSequence.length; j++) {
-                if (pressed === simonSequence[j]) {
-                    playTone(`${pressed}`);
-                    setTimeout(
-                        () => {
-                            setGameScreen('awake');
-                        },
-                        (j + 1) * 800,
-                    );
-                } else {
-                    setTimeout(() => {
-                        setGameScreen('awake');
-                    }, 800);
-                    exitToSummary();
+            if (pressed === simonSequence[tempCount]) {
+                playerCount.current = playerCount.current + 1;
+                playTone(`${pressed}`);
+                setTimeout(() => {
+                    setGameScreen('awake');
+                }, 800);
+                if (playerCount.current === simonSequence.length) {
+                    let newStreak = streak + 1;
+                    setStreak(newStreak);
+                    let simonNext = BUTTONS[generateNextColor()];
+                    let newSimonSequence = [...simonSequence, simonNext];
+                    setSimonSequence(newSimonSequence);
+                    playerCount.current = 0;
+                    startRound(newSimonSequence);
                 }
+            } else {
+                setTimeout(() => {
+                    setGameScreen('awake');
+                }, 800);
+                exitToSummary();
             }
-
-            let newStreak = streak + 1;
-            setStreak(newStreak);
-            let simonNext = generateNextColor();
-            let newSimonSequence = [...simonSequence, simonNext];
-            setSimonSequence(newSimonSequence);
-            startRound();
         }
     };
 
@@ -101,11 +120,12 @@ export default function App() {
         setQuitModalVisible(false);
         setGameSummaryVisible(false);
         setGameScreen('idle');
+        setPowerOn(false);
     }
 
     function exitToSummary() {
         console.log(simonSequence);
-        console.log(playerSequence);
+        console.log(playerCount.current);
         setQuitModalVisible(false);
         setGameSummaryVisible(true);
     }
@@ -123,7 +143,7 @@ export default function App() {
                     <img
                         className="all-on"
                         src="/all-on.png"
-                        style={{ opacity: gameScreen === 'awake' ? 1 : 0 }}
+                        style={{ opacity: gameScreen !== 'idle' ? 1 : 0 }}
                         alt=""
                     />
                     <img
@@ -166,16 +186,19 @@ export default function App() {
                         <div id="power-button" onClick={handlePowerClick}></div>
                     </div>
                 </div>
-                <div className="score-div">
-                    <p>Streak: {streak}</p>
-                </div>
+                {/*<div className="score-div">*/}
+                {/*    <p>Streak: {streak}</p>*/}
+                {/*</div>*/}
                 {quitModalVisible && (
                     <ConfirmQuitModal
                         handleResumeGame={handleResumeGame}
                         exitToSummary={exitToSummary}
                     />
                 )}
-                {gameSummaryVisible && <GameSummaryModal exitAndShutDown={exitAndShutDown} />}
+                {gameSummaryVisible && (
+                    <GameSummaryModal exitAndShutDown={exitAndShutDown} streak={streak} />
+                )}
+                {/*{gameoverModalVisible && <GameOverModal handleGameOver={handleGameOver} />}*/}
             </div>
         </>
     );

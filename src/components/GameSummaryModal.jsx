@@ -1,12 +1,12 @@
-export default function GameSummaryModal({ exitAndShutDown }) {
+export default function GameSummaryModal({ exitAndShutDown, streak }) {
     return (
         <>
             <div className="modal-overlay">
                 <div className="modal">
-                    <p>Your Streak was: XXX</p>
+                    <p>Your Streak was: {streak}</p>
                     <p>Play Again Soon!</p>
                     <button className="exit-to-start" onClick={exitAndShutDown}>
-                        <span>Shutdown</span>
+                        <span>Restart</span>
                     </button>
                 </div>
             </div>
