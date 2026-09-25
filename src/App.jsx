@@ -1,252 +1,320 @@
 import './styles.css';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
+import BoardControls from './components/BoardControls.jsx';
+import GameSettings from './components/GameSettings.jsx';
 import GameSummaryModal from './components/GameSummaryModal.jsx';
+import StatusBar from './components/StatusBar.jsx';
 import useGameSounds from './hooks/useGameSounds.js';
+import { loadValue, saveValue } from './storage.js';
+import {
+    BUTTONS,
+    defaultSettings,
+    gameReducer,
+    getRoundTiming,
+    initialState,
+    isCorrectPress,
+    randomColor,
+} from './gameReducer.js';
+
+const BOARD_LIGHTS = ['all', 'blue', 'red', 'yellow', 'green'];
+const SIMON_LEAD_IN = 800; // pause after the player lets go before Simon plays
+const PLAYER_TIME_LIMIT = 3000; // per press, like the original toy
+
+// Laid out like the pads: Q W on top, A S below
+const KEY_COLORS = { q: 'green', w: 'red', a: 'blue', s: 'yellow' };
+
+function createTimers() {
+    const ids = [];
+    return {
+        at(delay, callback) {
+            ids.push(setTimeout(callback, delay));
+        },
+        clear() {
+            ids.forEach(clearTimeout);
+        },
+    };
+}
+
+function loadInitialState() {
+    return {
+        ...initialState,
+        best: loadValue('simon-best', 0),
+    };
+}
+
+function keyColor(key) {
+    return KEY_COLORS[key.toLowerCase()];
+}
 
 export default function App() {
-    let showLit;
-    let buttonPause;
-    const gameRound = useRef(0);
+    const [game, dispatch] = useReducer(gameReducer, undefined, loadInitialState);
+    const [settings, setSettings] = useState(() => ({
+        ...defaultSettings,
+        ...loadValue('simon-settings', {}),
+    }));
+    const { playTone, playWrongTone, resumeAudio } = useGameSounds();
 
-    if (gameRound.current <= 4) {
-        showLit = 800;
-        buttonPause = 600;
-    } else if (gameRound.current > 13) {
-        showLit = 100;
-        buttonPause = 100;
-    } else if (gameRound.current > 8) {
-        showLit = 200;
-        buttonPause = 150;
-    } else if (gameRound.current > 4) {
-        showLit = 400;
-        buttonPause = 300;
-    }
+    // The pad the player is holding down, if any
+    const [pressed, setPressed] = useState(null);
+    const heldPress = useRef(null);
+    const releaseTimer = useRef(null);
 
-    const BUTTONS = ['green', 'red', 'yellow', 'blue'];
-    const [gameScreen, setGameScreen] = useState('idle');
-    const [powerOn, setPowerOn] = useState(false);
-    const [gameSummaryVisible, setGameSummaryVisible] = useState(false);
-    const [streak, setStreak] = useState(0);
-    const { playTone, playWrongTone } = useGameSounds();
-    const [simonSequence, setSimonSequence] = useState([]);
-    const playerCount = useRef(0);
-    const [currentPlayer, setCurrentPlayer] = useState('simon');
-    const sequenceTimeArray = useRef([]);
-    const previousTimeOut = useRef(null);
-    const [countdownValue, setCountdownValue] = useState(3);
-    const countdownInterval = useRef(null);
-    const [countdownVisible, setCountdownVisible] = useState(false);
+    useEffect(() => saveValue('simon-best', game.best), [game.best]);
+    useEffect(() => saveValue('simon-settings', settings), [settings]);
 
-    function handlePowerClick() {
-        if (powerOn) {
-            exitToSummary();
+    // Startup light show and 3-2-1 countdown
+    useEffect(() => {
+        if (game.phase !== 'startup' || game.paused) {
             return;
         }
-        const newPowerOn = !powerOn;
-        setPowerOn(newPowerOn);
-        if (newPowerOn) {
-            setCountdownValue(3);
-            runStartupCycle();
-            setStreak(0);
-            playerCount.current = 0;
-            const newSequence = [BUTTONS[generateNextColor()]];
-            setSimonSequence(newSequence);
-            setTimeout(() => {
-                startRound(newSequence);
-            }, 6000);
-            setGameScreen('awake');
+        const timers = createTimers();
+        BUTTONS.forEach((color, i) => {
+            timers.at((i + 1) * 600, () => {
+                playTone(color, 600);
+                dispatch({ type: 'LIGHT', lit: color });
+            });
+        });
+        timers.at(3000, () => {
+            playTone('green', 600);
+            dispatch({ type: 'LIGHT', lit: 'all' });
+        });
+        timers.at(3600, () => dispatch({ type: 'LIGHT', lit: null }));
+        [3, 2, 1].forEach((value, i) => {
+            timers.at(4000 + i * 1000, () => {
+                playTone('green', 600);
+                dispatch({ type: 'COUNTDOWN', value });
+            });
+        });
+        timers.at(7000, () => dispatch({ type: 'START_SIMON_TURN' }));
+        return timers.clear;
+    }, [game.phase, game.paused, playTone]);
+
+    // Simon plays the sequence once the player has let go, then hands over
+    useEffect(() => {
+        if (game.phase !== 'simonTurn' || game.paused || pressed) {
+            return;
+        }
+        const { showLit, buttonPause } = getRoundTiming(game.sequence.length);
+        const step = showLit + buttonPause;
+        const timers = createTimers();
+        game.sequence.forEach((color, n) => {
+            const start = SIMON_LEAD_IN + n * step;
+            timers.at(start, () => {
+                playTone(color, showLit);
+                dispatch({ type: 'LIGHT', lit: color });
+            });
+            timers.at(start + showLit, () => dispatch({ type: 'LIGHT', lit: null }));
+        });
+        timers.at(SIMON_LEAD_IN + game.sequence.length * step - buttonPause, () =>
+            dispatch({ type: 'START_PLAYER_TURN' }),
+        );
+        return timers.clear;
+    }, [game.phase, game.sequence, game.paused, pressed, playTone]);
+
+    // The player has a few seconds for each press; the clock waits while a pad is held
+    useEffect(() => {
+        const waiting = game.phase === 'playerTurn' || game.phase === 'playerAdd';
+        if (!waiting || game.paused || pressed) {
+            return;
+        }
+        const timer = setTimeout(() => dispatch({ type: 'TIMEOUT' }), PLAYER_TIME_LIMIT);
+        return () => clearTimeout(timer);
+    }, [game.phase, game.playerIndex, game.paused, pressed]);
+
+    // Buzz and flash the pad that should have been pressed
+    useEffect(() => {
+        if (game.phase !== 'mistake') {
+            return;
+        }
+        const timers = createTimers();
+        timers.at(0, playWrongTone);
+        if (game.missed) {
+            for (let i = 0; i < 3; i++) {
+                timers.at(i * 600, () => dispatch({ type: 'LIGHT', lit: game.missed }));
+                timers.at(i * 600 + 350, () => dispatch({ type: 'LIGHT', lit: null }));
+            }
+        }
+        timers.at(1900, () => dispatch({ type: 'MISTAKE_DONE' }));
+        return timers.clear;
+    }, [game.phase, game.missed, playWrongTone]);
+
+    // Victory lap: spin round the pads, then flash everything
+    useEffect(() => {
+        if (game.phase !== 'won') {
+            return;
+        }
+        const timers = createTimers();
+        for (let i = 0; i < 12; i++) {
+            const color = ['green', 'red', 'yellow', 'blue'][i % 4];
+            timers.at(600 + i * 120, () => {
+                playTone(color, 120);
+                dispatch({ type: 'LIGHT', lit: color });
+            });
+        }
+        for (let i = 0; i < 3; i++) {
+            timers.at(2100 + i * 400, () => {
+                playTone('green', 250);
+                dispatch({ type: 'LIGHT', lit: 'all' });
+            });
+            timers.at(2300 + i * 400, () => dispatch({ type: 'LIGHT', lit: null }));
+        }
+        timers.at(3600, () => dispatch({ type: 'WIN_DONE' }));
+        return timers.clear;
+    }, [game.phase, playTone]);
+
+    const releaseHeldPress = useCallback(() => {
+        clearTimeout(releaseTimer.current);
+        heldPress.current = null;
+        setPressed(null);
+    }, []);
+
+    // Pause when the tab is hidden, since browsers slow timers down in background tabs
+    useEffect(() => {
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                releaseHeldPress();
+                dispatch({ type: 'PAUSE' });
+            } else {
+                dispatch({ type: 'RESUME' });
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [releaseHeldPress]);
+
+    function handlePowerClick() {
+        resumeAudio();
+        releaseHeldPress();
+        if (game.phase === 'off') {
+            dispatch({ type: 'POWER_ON', firstColor: randomColor(), settings });
+        } else {
+            dispatch({ type: 'STOP' });
         }
     }
 
-    function runStartupCycle() {
-        for (let r = 0; r < 4; r++) {
-            setTimeout(
-                () => {
-                    playTone(`${BUTTONS[r]}`, 600);
-                    setGameScreen(`${BUTTONS[r]}-lit`);
-                },
-                (r + 1) * 600,
-            );
+    function handlePressStart(color) {
+        // Any pad skips the intro
+        if (game.phase === 'startup') {
+            dispatch({ type: 'START_SIMON_TURN' });
+            return;
         }
-        setTimeout(() => {
-            playTone(`green`, 600);
-            setGameScreen(`all-lit`);
-        }, 3000);
-        setTimeout(() => {
-            setGameScreen(`all-on`);
-        }, 3600);
-        setTimeout(() => {
-            setCountdownVisible(true);
-            playTone(`green`, 600);
-            countdownInterval.current = setInterval(() => {
-                setCountdownValue((prev) => {
-                    if (prev <= 1) {
-                        clearInterval(countdownInterval.current);
-                        return 0;
-                    }
-                    playTone(`green`, 600);
-                    return prev - 1;
-                });
-            }, 1000);
-        }, 4000);
-
-        setTimeout(() => {
-            setCountdownVisible(false);
-        }, 8000);
+        const waiting = game.phase === 'playerTurn' || game.phase === 'playerAdd';
+        if (!waiting || game.paused) {
+            return;
+        }
+        releaseHeldPress();
+        if (isCorrectPress(game, color)) {
+            // Same tone and length Simon uses this round, so the player's presses echo Simon's
+            const { showLit } = getRoundTiming(game.sequence.length);
+            playTone(color, showLit);
+            heldPress.current = { color, startedAt: performance.now(), minLength: showLit };
+            setPressed(color);
+        }
+        dispatch({ type: 'PRESS', color, nextColor: randomColor() });
     }
 
-    function startRound(newSequence) {
-        gameRound.current = gameRound.current + 1;
-        for (let n = 0; n < newSequence.length; n++) {
-            sequenceTimeArray.current.push(
-                setTimeout(
-                    () => {
-                        showSequence(newSequence[n]);
-                    },
-                    (n + 1) * (showLit + buttonPause),
-                ),
-            );
+    function handlePressEnd() {
+        if (!heldPress.current) {
+            return;
         }
-        sequenceTimeArray.current.push(
-            setTimeout(
-                () => setCurrentPlayer('player'),
-                newSequence.length * (showLit + buttonPause) + showLit,
-            ),
+        const heldFor = performance.now() - heldPress.current.startedAt;
+        clearTimeout(releaseTimer.current);
+        // A quick tap stays lit as long as Simon's light would
+        releaseTimer.current = setTimeout(
+            releaseHeldPress,
+            Math.max(0, heldPress.current.minLength - heldFor),
         );
     }
 
-    const showSequence = (lightUp) => {
-        setGameScreen(`${lightUp}-lit`);
-        playTone(`${lightUp}`, showLit);
-        setTimeout(() => {
-            setGameScreen('awake');
-        }, showLit);
-    };
-
-    const handleClick = (pressed) => {
-        if (powerOn && currentPlayer !== 'simon') {
-            clearTimeout(previousTimeOut.current);
-            let tempCount = playerCount.current;
-            setGameScreen(`${pressed}-lit`);
-            if (pressed === simonSequence[tempCount]) {
-                playerCount.current = playerCount.current + 1;
-                playTone(`${pressed}`, 800);
-                previousTimeOut.current = setTimeout(() => {
-                    setGameScreen('awake');
-                }, 800);
-                if (playerCount.current === simonSequence.length) {
-                    let newStreak = streak + 1;
-                    setStreak(newStreak);
-                    let simonNext = BUTTONS[generateNextColor()];
-                    let newSimonSequence = [...simonSequence, simonNext];
-                    setSimonSequence(newSimonSequence);
-                    playerCount.current = 0;
-                    setCurrentPlayer('simon');
-                    startRound(newSimonSequence);
-                }
-            } else {
-                playWrongTone();
-                setTimeout(() => {
-                    setGameScreen('awake');
-                }, 800);
-                exitToSummary();
-            }
+    const handleKeyDown = useEffectEvent((e) => {
+        if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || game.phase === 'gameOver') {
+            return;
         }
-    };
-
-    function generateNextColor() {
-        return Math.floor(Math.random() * 4);
-    }
-
-    function exitAndShutDown() {
-        setGameSummaryVisible(false);
-        setGameScreen('idle');
-        setPowerOn(false);
-        gameRound.current = 0;
-        for (let t = 0; t < sequenceTimeArray.current.length; t++) {
-            clearTimeout(sequenceTimeArray.current[t]);
+        if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) {
+            return;
         }
-        sequenceTimeArray.current = [];
-    }
-
-    function exitToSummary() {
-        for (let t = 0; t < sequenceTimeArray.current.length; t++) {
-            clearTimeout(sequenceTimeArray.current[t]);
+        if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            handlePowerClick();
+            return;
         }
-        setGameSummaryVisible(true);
-        gameRound.current = 0;
-        sequenceTimeArray.current = [];
-    }
+        const color = keyColor(e.key);
+        if (color) {
+            e.preventDefault();
+            handlePressStart(color);
+        }
+    });
+
+    const handleKeyUp = useEffectEvent((e) => {
+        if (heldPress.current && heldPress.current.color === keyColor(e.key)) {
+            handlePressEnd();
+        }
+    });
+
+    useEffect(() => {
+        const onKeyDown = (e) => handleKeyDown(e);
+        const onKeyUp = (e) => handleKeyUp(e);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+        };
+    }, []);
+
+    const shownLight = pressed ?? game.lit;
 
     return (
-        <>
-            <div className="app">
-                <div className="board-container">
+        <div className="app">
+            <div className="board-container">
+                <img
+                    className="all-dim"
+                    src="/board/all-dim.webp"
+                    style={{ opacity: game.phase === 'off' ? 1 : 0 }}
+                    alt=""
+                />
+                <img
+                    className="all-on"
+                    src="/board/all-on.webp"
+                    style={{ opacity: game.phase !== 'off' ? 1 : 0 }}
+                    alt=""
+                />
+                {BOARD_LIGHTS.map((light) => (
                     <img
-                        className="all-dim"
-                        src="/all-dim.png"
-                        style={{ opacity: gameScreen === 'idle' ? 1 : 0 }}
+                        key={light}
+                        className={`${light}-lit`}
+                        src={`/board/${light}-lit.webp`}
+                        style={{ opacity: shownLight === light ? 1 : 0 }}
                         alt=""
                     />
-                    <img
-                        className="all-on"
-                        src="/all-on.png"
-                        style={{ opacity: gameScreen !== 'idle' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <img
-                        className="all-lit"
-                        src="/all-lit.png"
-                        style={{ opacity: gameScreen === 'all-lit' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <img
-                        className="blue-lit"
-                        src="/blue-lit.png"
-                        style={{ opacity: gameScreen === 'blue-lit' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <img
-                        className="red-lit"
-                        src="/red-lit.png"
-                        style={{ opacity: gameScreen === 'red-lit' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <img
-                        className="yellow-lit"
-                        src="/yellow-lit.png"
-                        style={{ opacity: gameScreen === 'yellow-lit' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <img
-                        className="green-lit"
-                        src="/green-lit.png"
-                        style={{ opacity: gameScreen === 'green-lit' ? 1 : 0 }}
-                        alt=""
-                    />
-                    <div id="button-grid">
-                        <div className="btn-green" onClick={() => handleClick('green')} />
-                        <div className="btn-red" onClick={() => handleClick('red')} />
-                        <div className="btn-blue" onClick={() => handleClick('blue')} />
-                        <div className="btn-yellow" onClick={() => handleClick('yellow')} />
+                ))}
+                <BoardControls
+                    powerOn={game.phase !== 'off'}
+                    onPressStart={handlePressStart}
+                    onPressEnd={handlePressEnd}
+                    onPower={handlePowerClick}
+                />
+                {game.countdown !== null && (
+                    <div id="countdown-overlay-grid">
+                        <p id="countdown-number">{game.countdown}</p>
                     </div>
-                    <div id="power-grid">
-                        <div id="power-button" onClick={handlePowerClick}></div>
-                    </div>
-                    <div className="score-div">
-                        <p>Streak: {streak}</p>
-                    </div>
-                    {countdownValue > 0 && countdownVisible && powerOn && (
-                        <div id="countdown-overlay-grid">
-                            <p id="countdown-number">{countdownValue}</p>
-                        </div>
-                    )}
-                </div>
-
-                {gameSummaryVisible && (
-                    <GameSummaryModal exitAndShutDown={exitAndShutDown} streak={streak} />
                 )}
             </div>
-        </>
+
+            <StatusBar game={game} />
+
+            {/* Hidden rather than removed during a game, so the board doesn't jump */}
+            <GameSettings
+                settings={settings}
+                onChange={setSettings}
+                hidden={game.phase !== 'off'}
+            />
+
+            <p className="key-hint">Keys: Q W A S (shown by each pad) · Space for power</p>
+
+            {game.phase === 'gameOver' && (
+                <GameSummaryModal game={game} onRestart={() => dispatch({ type: 'RESET' })} />
+            )}
+        </div>
     );
 }

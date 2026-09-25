@@ -18,13 +18,14 @@ html, body, #root {
     --text: #f1f5f9;
     --text-muted: #a1a1a1;
     --font-body: "Orbitron", system-ui;
-    --font-heading: "Orbitron", system-ui, sans-serif;
 
-    --fs-sm: clamp(1.2rem, 2vw, 1.4rem);
     --fs-body: clamp(1.4rem, 3vw, 1.6rem);
     --fs-h3: clamp(1rem, 3.5vw, 2.2rem);
-    --fs-h2: clamp(2.2rem, 4vw, 2.8rem);
-    --fs-h1: clamp(2.8rem, 5vw, 4rem);
+
+    /* Fits the settings below the board on short screens, without getting tiny */
+    --board-size: min(88vw, 62dvh, max(16rem, 100dvh - 20rem));
+    --error: #f87171;
+    --warning: #fbbf24;
 }
 
 body {
@@ -39,50 +40,102 @@ body {
 
 
 .app {
-    width: 100dvw;
+    width: 100%;
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 1rem;
+    padding: 1rem;
 }
 
 .board-container {
     display: grid;
     grid-template-areas: "board";
+    /* A fixed cell, so the images and the click overlay line up exactly */
+    grid-template-columns: var(--board-size);
+    grid-template-rows: var(--board-size);
 
 }
 
 .board-container img {
     grid-area: board;
-    width: min(80vw, 80vh);
+    width: var(--board-size);
     aspect-ratio: 1;
-
-
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
-
-img {
-    width: min(80vw, 80vh);
-    aspect-ratio: 1;
-}
-
-img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-lit, img.all-lit {
-    opacity: 0;
-}
-
-#button-grid {
-
+.board-controls {
     grid-area: board;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
+    width: 100%;
+    height: 100%;
     z-index: 10;
-
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
-#button-grid:hover {
+.board-controls path,
+.board-controls circle {
+    fill: transparent;
     cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* The power button's ring glows on hover, and pulses while the game is on */
+.board-controls .power-button {
+    stroke: var(--accent);
+    stroke-width: 0.018;
+    stroke-opacity: 0;
+    transition: stroke-opacity 0.3s ease;
+}
+
+.board-controls .power-button:hover,
+.board-controls .power-button:focus-visible {
+    stroke-opacity: 0.6;
+}
+
+.board-controls .power-button.on {
+    animation: powerGlow 2.4s ease-in-out infinite;
+}
+
+/* Keyboard hints beside each pad; hidden on touch screens */
+.keycap {
+    pointer-events: none;
+}
+
+.keycap rect {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 0.008;
+    stroke-opacity: 0.6;
+}
+
+.keycap text {
+    fill: var(--text-muted);
+    font-family: var(--font-body), sans-serif;
+    font-size: 0.09px;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+@media (hover: none) {
+    .keycap {
+        display: none;
+    }
+}
+
+@keyframes powerGlow {
+    0%, 100% {
+        stroke-opacity: 0.35;
+    }
+    50% {
+        stroke-opacity: 0.9;
+    }
 }
 
 
@@ -93,35 +146,163 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     z-index:20;
+    pointer-events: none;
     justify-items: center;
     align-items: center;
 
 }
 
 
-#power-grid {
-    grid-area: board;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    grid-template-rows: repeat(5, 1fr);
-
-}
-
-#power-grid #power-button {
-    grid-area: 3/3/4/4;
-    z-index: 30;
-    cursor: pointer;
+.status-bar {
     text-align: center;
 }
 
+.status {
+    font-size: clamp(1rem, calc(var(--board-size) * 0.075), 2rem);
+    font-weight: 700;
+    min-height: 1.4em;
+    transition: color 0.2s ease;
+}
 
+.status-go {
+    color: var(--accent);
+}
 
+.status-warning {
+    color: var(--warning);
+}
 
-.score-div {
-    margin-top:5%;
-    font-size: var(--fs-h3);
-    min-height: 20%;
-    justify-self: center;
+.status-error {
+    color: var(--error);
+}
+
+.status-speed-up {
+    color: var(--warning);
+    animation: speedUp 0.5s ease-in-out 3;
+}
+
+@keyframes speedUp {
+    50% {
+        transform: scale(1.2);
+    }
+}
+
+.stats {
+    display: flex;
+    justify-content: center;
+    gap: 1.5em;
+    margin-top: 0.4rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* Settings, shown while the game is off */
+.settings {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.settings-hidden {
+    visibility: hidden;
+}
+
+.setting {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.setting-label {
+    min-width: 4.5em;
+    text-align: right;
+    color: var(--text-muted);
+}
+
+.segmented {
+    display: flex;
+    border: 1px solid #3a3a3a;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.segmented button {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 0.45rem 0.8rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+@media (max-width: 420px) {
+    .setting-label {
+        min-width: 0;
+    }
+
+    .segmented button {
+        padding: 0.45rem 0.55rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .setting {
+        gap: 0.5rem;
+    }
+
+    .segmented button {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.45rem;
+    }
+}
+
+.segmented button + button {
+    border-left: 1px solid #3a3a3a;
+}
+
+.segmented button:hover {
+    color: var(--text);
+}
+
+.segmented button.selected {
+    background: var(--accent);
+    color: var(--background);
+}
+
+.segmented button:focus-visible,
+.toggle input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.toggle {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.toggle input {
+    accent-color: var(--accent);
+    width: 1.1em;
+    height: 1.1em;
+    cursor: pointer;
+}
+
+.key-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    text-align: center;
+}
+
+@media (hover: none) {
+    .key-hint {
+        display: none;
+    }
 }
 
 
@@ -133,38 +314,55 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
     justify-content: center;
     background: rgba(0, 0, 0, 0.8);
     user-select: none;
-    font-size: var(--fs-h3);
     z-index: 1000;
 }
 
 .modal {
-    width: 100%;
+    width: min(90vw, 28rem);
     max-height: 80dvh;
     overflow-y: auto;
-    border-radius: 12px;
-    padding: 1.5rem;
+    border-radius: 16px;
+    padding: 2rem 1.5rem 1rem;
     text-align: center;
+    background: var(--surface);
+    border: 1px solid rgba(94, 234, 212, 0.35);
+    box-shadow: 0 0 40px rgba(94, 234, 212, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    font-size: 1rem;
+}
+
+.modal h2 {
+    font-size: var(--fs-h3);
+    color: var(--accent);
+    margin-bottom: 0.4rem;
+}
+
+.modal .new-best {
+    color: var(--warning);
+    font-weight: 700;
+}
+
+.modal .muted {
+    color: var(--text-muted);
 }
 
 .modal button {
     position: relative;
     padding: 1rem 2rem;
+    margin: 1.5rem auto;
+    font-family: inherit;
     font-size: 1.1rem;
     font-weight: 600;
     color: #fff;
-    background: none;
-    border: none;
+    background: #000;
+    border: 2px solid #0ff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
     cursor: pointer;
     transition: all 0.4s ease;
     min-width: 20%;
     z-index: 1;
-}
-
-.modal button {
-    background: #000;
-    border: 2px solid #0ff;
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-    margin: 10%;
 }
 
 .modal button::before,
@@ -196,11 +394,17 @@ img.all-dim, img.all-on, img.green-lit, img.red-lit, img.yellow-lit, img.blue-li
 
 
 #countdown-number {
-    cursor: pointer;
-    font-size: 1000%;
+    font-size: calc(var(--board-size) * 0.3);
     font-weight: bolder;
     color: var(--text);
     pointer-events: none;
     text-shadow: 8px 8px 10px black;
 
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+    }
 }
